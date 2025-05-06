@@ -1,10 +1,14 @@
 # 약 검색 API 호출
 import httpx
+import os
 from fastapi import HTTPException
+from dotenv import load_dotenv
+
+load_dotenv()
 
 async def search_medicine_by_name(medicine_name: str):
     api_url = "https://api.medeasy.dev/medicine/search"
-    jwt_token = "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjcsImV4cCI6MTc0NjI2NzE2MH0.rZJKEOJ_yTLH-mXxJmSjNFUnZBrJywmhLDSW4P3Na0A"
+    jwt_token = os.getenv("JWT_TOKEN")
     headers = {"Authorization": f"Bearer {jwt_token}"}
     params = {"name": medicine_name}
 

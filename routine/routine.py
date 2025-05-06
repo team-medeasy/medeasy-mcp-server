@@ -1,15 +1,24 @@
 # 사용자 스케줄 조회 API 호출
 import httpx
+import os
 from fastapi import HTTPException
 
 from main import app
 from medicine.medicine import search_medicine_by_name
 from routine.model import RoutineCreationRequest
+from dotenv import load_dotenv
 
+load_dotenv()
 
-async def get_user_schedules():
+# 응답 예시:
+# {
+#   "아침": "37",
+#   "저녁": "38",
+#   "자기전": "39"
+# }
+async def get_user_schedules()->dict[str, str]:
     api_url = "https://api.medeasy.dev/user/schedule"
-    jwt_token = "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOjcsImV4cCI6MTc0NjI2NzE2MH0.rZJKEOJ_yTLH-mXxJmSjNFUnZBrJywmhLDSW4P3Na0A"
+    jwt_token = os.getenv("JWT_TOKEN")
     headers = {"Authorization": f"Bearer {jwt_token}"}
 
     async with httpx.AsyncClient() as client:
@@ -17,6 +26,7 @@ async def get_user_schedules():
             response = await client.get(api_url, headers=headers)
             response.raise_for_status()
             schedules = response.json().get("body", [])
+
             return {schedule["name"]: schedule["id"] for schedule in schedules}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"스케줄 조회 중 오류: {str(e)}")
@@ -35,7 +45,7 @@ async def register_medicine_routine(request: RoutineCreationRequest):
 
     # 사용자가 선택한 시간대에 맞는 schedule_id 찾기
     user_schedule_ids = []
-    for time in request.schedule_times:
+    for time in request.schedule_times: # 아침 점심 저녁
         if time in schedules:
             user_schedule_ids.append(schedules[time])
 
