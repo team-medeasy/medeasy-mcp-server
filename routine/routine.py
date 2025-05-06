@@ -4,7 +4,6 @@ import os
 from fastapi import HTTPException
 
 from main import app
-from medicine.medicine import search_medicine_by_name
 from routine.model import RoutineCreationRequest
 from dotenv import load_dotenv
 
@@ -36,7 +35,7 @@ async def get_user_schedules()->dict[str, str]:
 @app.post("/medication/register-routine", operation_id="register_medicine_routine")
 async def register_medicine_routine(request: RoutineCreationRequest):
     # 1. 약 검색으로 medicine_id 획득
-    medicine_id = await search_medicine_by_name(request.medicine_name)
+    medicine_id = await search_medicine_id_by_name(request.medicine_name)
     if not medicine_id:
         return {"error": "일치하는 약을 찾을 수 없습니다"}
 
