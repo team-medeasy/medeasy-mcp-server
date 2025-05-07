@@ -7,6 +7,8 @@ from main import app
 from routine.model import RoutineCreationRequest
 from dotenv import load_dotenv
 
+from service.medicine_service import search_medicine_id_by_name
+
 load_dotenv()
 
 # 응답 예시:
