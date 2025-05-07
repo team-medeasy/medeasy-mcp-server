@@ -19,8 +19,6 @@ setup_logging()
 app.add_middleware(LoggingMiddleware)
 
 
-
-
 # Add MCP server to the FastAPI app
 mcp = FastApiMCP(
     app,
@@ -28,7 +26,7 @@ mcp = FastApiMCP(
     description="convert fastapi to mcp server",
     describe_full_response_schema=True,  # Describe the full response JSON-schema instead of just a response example
     describe_all_responses=True,  # Describe all the possible responses instead of just the success (2XX) response
-    http_client=httpx.AsyncClient(timeout=20, base_url="http://localhost:8000"),  # base_url 추가
+    http_client=httpx.AsyncClient(timeout=20, base_url="http://localhost:30003"),  # base_url 추가
 )
 
 # mcp 서버 초기화 (새로 반영된 api도 추가)
@@ -42,4 +40,4 @@ if __name__ == "__main__":
     print("MCP 서버를 http://localhost:8000/mcp 에서 실행 중입니다.")
     print("매니페스트 URL: http://localhost:8000/mcp/manifest")
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=30003)
