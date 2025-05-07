@@ -48,4 +48,4 @@ jobs:
           key: ${{ secrets.MEDEASY_PEM }}
           script: |
             set -x
-            sh deploy-fastapi.sh
+            sh deploy-mcp-server.sh
