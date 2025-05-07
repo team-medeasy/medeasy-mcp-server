@@ -1,4 +1,5 @@
 import json
+from logging import exception
 from typing import List, Dict, Any
 
 import httpx
@@ -13,6 +14,9 @@ from langchain_openai import ChatOpenAI
 logger=logging.getLogger(__name__)
 load_dotenv()
 medeasy_api_url = os.getenv("MEDEASY_API_URL")
+
+if not medeasy_api_url:
+    logger.error("medeasy api url not set")
 
 llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
 
