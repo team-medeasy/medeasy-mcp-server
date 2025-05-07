@@ -16,7 +16,5 @@ COPY --from=builder /install /usr/local
 
 COPY . .
 
-COPY .env .env
-
 CMD ["python", "main.py"]
 
