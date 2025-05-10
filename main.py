@@ -37,7 +37,7 @@ mcp.mount()
 
 if __name__ == "__main__":
     import uvicorn
-    print("MCP 서버를 http://localhost:8000/mcp 에서 실행 중입니다.")
-    print("매니페스트 URL: http://localhost:8000/mcp/manifest")
+    print("MCP 서버를 http://localhost:30003/mcp 에서 실행 중입니다.")
+    print("매니페스트 URL: http://localhost:30003/mcp/manifest")
 
     uvicorn.run(app, host="0.0.0.0", port=30003)
