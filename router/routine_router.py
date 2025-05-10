@@ -1,8 +1,9 @@
 import logging
 import os
-from datetime import date
+from datetime import date, datetime
 
 import httpx
+import pytz
 from fastapi import APIRouter, FastAPI, Query, HTTPException
 from dotenv import load_dotenv
 from service.medicine_service import search_medicine_id_by_name
@@ -16,6 +17,9 @@ router = APIRouter(
 )
 
 medeasy_api_url = os.getenv("MEDEASY_API_URL")
+
+# 한국 시간대 객체 생성 - 전역 범위에 정의
+kst = pytz.timezone('Asia/Seoul')
 
 @router.post("/register", operation_id="create_medicine_routine")
 async def create_medicine_routine(
@@ -61,8 +65,8 @@ async def create_medicine_routine(
 @router.get("", operation_id="get_medicine_routine_list_by_date")
 async def get_medicine_routine_list_by_date(
         jwt_token: str = Query(description="Users JWT Token", required=True),
-        start_date: date = Query(default=date.today(),description="Query start date (default: today)"),
-        end_date: date = Query(default=date.today(),description="Query start date (default: today)")
+        start_date: date = Query(default= datetime.now(kst).date(),description="Query start date (default: today)"),
+        end_date: date = Query(default=datetime.now(kst).date(),description="Query start date (default: today)")
 ):
     url = f"{medeasy_api_url}/routine"
     # Query String 파라미터로 start_date, end_date 전달
