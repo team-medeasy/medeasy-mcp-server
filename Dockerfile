@@ -17,9 +17,9 @@ COPY --from=builder /install /usr/local
 COPY . .
 
 # 한국 시간대 설정
-ENV TZ=Asia/Seoul
-RUN apt-get update && apt-get install -y tzdata && \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apk add --no-cache tzdata \
+ && cp /usr/share/zoneinfo/Asia/Seoul /etc/localtime \
+ && echo "Asia/Seoul" > /etc/timezone
 
 CMD ["python", "main.py"]
 
