@@ -21,7 +21,11 @@ medeasy_api_url = os.getenv("MEDEASY_API_URL")
 # 한국 시간대 객체 생성 - 전역 범위에 정의
 kst = pytz.timezone('Asia/Seoul')
 
-@router.post("/register", operation_id="create_medicine_routine")
+@router.post(
+    path="/register",
+    operation_id="create_new_medicine_routine",
+    description="새로운 복약 일정을 등록할 때 사용하는 도구"
+)
 async def create_medicine_routine(
         medicine_name: str = Query(description="medicine name", required=True),
         nickname: str = Query(default=None, description="medicine nickname", required=False),
@@ -42,6 +46,9 @@ async def create_medicine_routine(
 
     # OpenAI로 입력받은 user_schedule_names와 어울리는 user_schedule_id 추출
     matched_ids=await mapping_user_schedule_ids(schedules, user_schedule_names)
+
+    if not matched_ids:
+        return {"복약 일정을 등록하실 시간대가 없습니다. 먼저 시간대를 설정해주세요."}
 
     # 루틴 생성 API 호출
     routine_url = f"{medeasy_api_url}/routine"
