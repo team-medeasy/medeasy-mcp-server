@@ -89,3 +89,25 @@ async def get_medicine_routine_list_by_date(
         if resp.status_code >= 400:
             raise HTTPException(status_code=resp.status_code, detail=f"조회 실패: {resp.text}")
         return resp.json()
+
+
+@router.get(
+    "/prescription",
+    operation_id="register_routine_by_prescription",
+    description="사용자가 처방전 촬영으로 루틴 등록을 원할 때 사용하는 도구"
+)
+async def register_routine_by_prescription(
+        jwt_token: str = Query(description="Users JWT Token", required=True),
+):
+    return "처방전 촬영해주세요."
+
+
+@router.get(
+    "/pills-photo",
+    operation_id="register_routine_by_pills_photo",
+    description="사용자가 알약 촬영으로 복약 일정을 등록하고 싶을 때 사용하는 도구"
+)
+async def register_routine_by_pills_photo(
+        jwt_token: str = Query(description="Users JWT Token", required=True),
+):
+    return "알약 사진을 업로드하거나 촬영해주세요."
