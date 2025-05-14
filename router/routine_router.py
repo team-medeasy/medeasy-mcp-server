@@ -90,6 +90,71 @@ async def get_medicine_routine_list_by_date(
             raise HTTPException(status_code=resp.status_code, detail=f"조회 실패: {resp.text}")
         return resp.json()
 
+@router.patch(
+    "/check",
+    operation_id="drug_routine_completed_check",
+    description="사용자가 복약을 수행하고 복약 일정을 체크하고 싶을 때 사용하는 도구"
+)
+async def drug_routine_completed_check(
+        jwt_token: str = Query(description="Users JWT Token", required=True),
+        routine_id: int = Query(description="check routine identifier", required=True)
+):
+    logger.info("복약 체크 도구 호출")
+    url = f"{medeasy_api_url}/routine/check"
+
+    params = {
+        "routine_id": routine_id,
+        "is_taken": True
+    }
+
+    headers = {"Authorization": f"Bearer {jwt_token}", "Content-Type": "application/json"}
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.patch(url, headers=headers, params=params)
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=f"조회 실패: {resp.text}")
+        return resp.json()
+
+
+@router.patch(
+    "/all/check",
+    operation_id="drug_schedule_all_routines_completed_check",
+    description="사용자가 정해진 스케줄에 있는 약을 전부 복용하고 한번에 복약 여부들을 체크하고 싶을 때 사용하는 도구"
+)
+async def drug_routine_completed_check(
+        jwt_token: str = Query(description="Users JWT Token", required=True),
+        is_all_drugs_taken: bool = Query(description="사용자가 진짜 약을 다먹었는지 여부", required=True),
+        schedule_name: str = Query(description="Schedule names for when the user takes medicine", required=True, example=["아침", "점심", "저녁", "자기 전"])
+):
+    logger.info("스케줄에 해당하는 복약 전부 체크 도구 호출")
+    url = f"{medeasy_api_url}/routine/check/schedule"
+
+    if not is_all_drugs_taken:
+        return "사용자의 복용 여부를 다시 한번 확인해주세요."
+
+    # user_schedules 조회
+    schedules = await get_user_schedule(jwt_token)
+    matching_schedule = next(
+        (schedule for schedule in schedules if schedule["name"] == schedule_name),
+        None
+    )
+
+    if not matching_schedule:
+        return "복용 체크 하려는 사용자의 스케줄 시간대가 존재하지 않습니다."
+
+    params = {
+        "schedule_id": matching_schedule["user_schedule_id"],
+    }
+
+    headers = {"Authorization": f"Bearer {jwt_token}", "Content-Type": "application/json"}
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.patch(url, headers=headers, params=params)
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=resp.status_code, detail=f"조회 실패: {resp.text}")
+        return resp.json()
+
+
 
 @router.get(
     "/prescription",

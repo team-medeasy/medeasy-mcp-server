@@ -80,3 +80,31 @@ async def search_medicine(
         except httpx.RequestError as e:
             # 네트워크 관련 에러 처리 (타임아웃, 연결 오류 등)
             return {"error": f"API 요청 중 오류 발생: {str(e)}"}
+
+@router.get("/current/medications", operation_id="get_current_medications", description="사용자가 현재 복용 중인 의약품 정보 조회")
+async def get_current_medications(
+        jwt_token: str = Query(None, description="Users JWT Token")
+):
+    api_url = f"{os.getenv("MEDEASY_API_URL")}/user/medicines/current"
+
+    if not jwt_token:
+        return {"error": "authorization token is required"}
+
+    # JWT 토큰 설정 (실제 토큰으로 대체 필요)
+    headers = {
+        "Authorization": f"Bearer {jwt_token}"
+    }
+
+    # 비동기 HTTP 클라이언트를 사용하여 API 요청 보내기
+    async with httpx.AsyncClient() as client:
+        try:
+            logger.info(f"jwt_token: {headers}")
+            response = await client.get(api_url, headers=headers)
+            response.raise_for_status()  # 4XX, 5XX 에러 발생 시 예외 발생
+            return response.json()  # API 응답을 JSON으로 변환하여 반환
+        except httpx.HTTPStatusError as e:
+            # HTTP 상태 코드 에러 처리
+            return {"error": f"API 요청 실패: {e.response.status_code}", "detail": e.response.text}
+        except httpx.RequestError as e:
+            # 네트워크 관련 에러 처리 (타임아웃, 연결 오류 등)
+            return {"error": f"API 요청 중 오류 발생: {str(e)}"}
