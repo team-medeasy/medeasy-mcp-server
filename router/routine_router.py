@@ -97,14 +97,28 @@ async def get_medicine_routine_list_by_date(
 )
 async def drug_routine_completed_check(
         jwt_token: str = Query(description="Users JWT Token", required=True),
-        routine_id: int = Query(description="check routine identifier", required=True)
+        medicine_name: str = Query(description="check routine medicine name or nickname", required=True),
+        schedule_name: str = Query(description="Schedule name for when the user takes medicine", required=True, example=["아침", "점심", "저녁", "자기 전"])
 ):
-    logger.info("복약 체크 도구 호출")
-    url = f"{medeasy_api_url}/routine/check"
+    logger.info(f"복약 체크 도구 호출, medicine_name : {medicine_name}, schedule_name : {schedule_name}")
+    url = f"{medeasy_api_url}/routine/check/medicine_name"
+
+    # "약"이 붙은 경우를 처리하는 로직 추가 -> 아침약 체크해줘에서 스케줄 이름이 아침이 아닌 아침약으로 입력되는 문제 수정
+    clean_schedule_name = schedule_name.replace("약", "") if "약" in schedule_name else schedule_name
+
+    # user_schedules 조회
+    schedules = await get_user_schedule(jwt_token)
+    matching_schedule = next(
+        (schedule for schedule in schedules if schedule["name"] == clean_schedule_name),
+        None
+    )
+
+    if not matching_schedule:
+        return "복용 체크 하려는 사용자의 스케줄 시간대가 존재하지 않습니다."
 
     params = {
-        "routine_id": routine_id,
-        "is_taken": True
+        "medicine_name": medicine_name,
+        "schedule_id": matching_schedule["user_schedule_id"],
     }
 
     headers = {"Authorization": f"Bearer {jwt_token}", "Content-Type": "application/json"}
@@ -121,10 +135,10 @@ async def drug_routine_completed_check(
     operation_id="drug_schedule_all_routines_completed_check",
     description="사용자가 정해진 스케줄에 있는 약을 전부 복용하고 한번에 복약 여부들을 체크하고 싶을 때 사용하는 도구"
 )
-async def drug_routine_completed_check(
+async def drug_schedule_all_routines_completed_check(
         jwt_token: str = Query(description="Users JWT Token", required=True),
         is_all_drugs_taken: bool = Query(description="사용자가 진짜 약을 다먹었는지 여부", required=True),
-        schedule_name: str = Query(description="Schedule names for when the user takes medicine", required=True, example=["아침", "점심", "저녁", "자기 전"])
+        schedule_name: str = Query(description="Schedule name for when the user takes medicine", required=True, example=["아침", "점심", "저녁", "자기 전"])
 ):
     logger.info("스케줄에 해당하는 복약 전부 체크 도구 호출")
     url = f"{medeasy_api_url}/routine/check/schedule"
@@ -132,10 +146,13 @@ async def drug_routine_completed_check(
     if not is_all_drugs_taken:
         return "사용자의 복용 여부를 다시 한번 확인해주세요."
 
+    # "약"이 붙은 경우를 처리하는 로직 추가
+    clean_schedule_name = schedule_name.replace("약", "") if "약" in schedule_name else schedule_name
+
     # user_schedules 조회
     schedules = await get_user_schedule(jwt_token)
     matching_schedule = next(
-        (schedule for schedule in schedules if schedule["name"] == schedule_name),
+        (schedule for schedule in schedules if schedule["name"] == clean_schedule_name),
         None
     )
 
