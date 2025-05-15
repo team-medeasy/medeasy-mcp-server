@@ -27,6 +27,7 @@ mcp = FastApiMCP(
     describe_full_response_schema=True,  # Describe the full response JSON-schema instead of just a response example
     describe_all_responses=True,  # Describe all the possible responses instead of just the success (2XX) response
     http_client=httpx.AsyncClient(timeout=20, base_url="http://localhost:30003"),  # base_url 추가
+    exclude_operations=["get_medicine_by_medicine_id"]
 )
 
 # mcp 서버 초기화 (새로 반영된 api도 추가)
