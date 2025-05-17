@@ -81,7 +81,7 @@ async def search_medicine(
             # 네트워크 관련 에러 처리 (타임아웃, 연결 오류 등)
             return {"error": f"API 요청 중 오류 발생: {str(e)}"}
 
-@router.get("/current/medications", operation_id="get_current_medications", description="사용자가 현재 복용 중인 의약품 정보 조회")
+@router.get("/current/medications", operation_id="get_current_medications_information", description="사용자가 현재 복용 중인 의약품 정보 조회")
 async def get_current_medications(
         jwt_token: str = Query(None, description="Users JWT Token")
 ):

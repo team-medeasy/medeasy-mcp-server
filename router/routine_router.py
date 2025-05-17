@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import httpx
 import pytz
@@ -76,19 +76,65 @@ async def get_medicine_routine_list_by_date(
         end_date: date = Query(default=datetime.now(kst).date(),description="Query start date (default: today)")
 ):
     url = f"{medeasy_api_url}/routine"
-    # Query String 파라미터로 start_date, end_date 전달
+    logger.info(f"사용자 복약 일정 조회 {start_date}~{end_date}")
     params = {
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat()
     }
-
     headers = {"Authorization": f"Bearer {jwt_token}", "Content-Type": "application/json"}
 
     async with httpx.AsyncClient() as client:
         resp = await client.get(url, headers=headers, params=params)
-        if resp.status_code >= 400:
-            raise HTTPException(status_code=resp.status_code, detail=f"조회 실패: {resp.text}")
-        return resp.json()
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=f"조회 실패: {resp.text}")
+
+
+    now = datetime.now(kst).time()
+    lines = []
+    lines.append("오늘 복약 일정에 대해 알려드릴게요!")
+
+    data = resp.json()["body"]
+    soon_delta = timedelta(minutes=30)
+    now_dt = datetime.combine(datetime.today(), now)
+
+    for day in data:  # 날짜 단위 루틴 (보통 하루 단위로 1개만 들어있음)
+        routine_date = datetime.strptime(day["take_date"], "%Y-%m-%d").date()
+
+        for schedule in day.get("user_schedule_dtos", []):
+            take_time_str = schedule.get("take_time")
+            if not take_time_str:
+                continue  # take_time 없으면 skip
+
+            try:
+                time_obj = datetime.strptime(take_time_str, "%H:%M:%S").time()
+            except ValueError:
+                continue  # 포맷 이상할 경우 skip
+
+            routine_date_time = datetime.combine(routine_date, time_obj)
+
+            # (1) 전체 스케줄 요약
+            medicines = ", ".join( # ex) 오라록신정100mg(오플록사신) 1정, 씬지록신정100마이크로그램(레보티록신나트륨수화물) 1정
+                f"{routine.get('nickname', '')} {routine.get('dose', '')}정"
+                for routine in schedule.get("routine_dtos", [])
+            )
+            lines.append(f"- {schedule.get('name', '')} {time_obj.strftime('%H:%M')} : {medicines}")
+
+            # (2) 미복용 알림 (스케줄 시간 지남 + 안 먹음)
+            if now_dt > routine_date_time:
+                not_taken = [
+                    r for r in schedule.get("routine_dtos", [])
+                    if not r.get("is_taken", False)
+                ]
+                if not_taken:
+                    meds = ", ".join(r.get("nickname", "") for r in not_taken)
+                    lines.append(f"아직 {schedule.get('name', '')}에 {meds}을(를) 복용하지 않으셨습니다.")
+
+            # (3) 곧 복용 예정 안내
+            schedule_dt = datetime.combine(datetime.today(), time_obj)
+            if now_dt < schedule_dt <= now_dt + soon_delta:
+                lines.append(f"잠시 후 {schedule.get('name', '')} 복용 시간이 다가옵니다. 꼭 복용해 주세요!")
+
+    return {"message": "\n".join(lines)}
 
 @router.patch(
     "/check",
