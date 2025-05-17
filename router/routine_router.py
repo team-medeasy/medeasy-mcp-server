@@ -76,6 +76,7 @@ async def get_medicine_routine_list_by_date(
         end_date: date = Query(default=datetime.now(kst).date(),description="Query start date (default: today)")
 ):
     url = f"{medeasy_api_url}/routine"
+    logger.info(f"사용자 복약 일정 조회 {start_date}~{end_date}")
     params = {
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat()
