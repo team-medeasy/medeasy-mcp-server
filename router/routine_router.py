@@ -119,7 +119,7 @@ async def get_medicine_routine_list_by_date(
             lines.append(f"- {schedule.get('name', '')} {time_obj.strftime('%H:%M')} : {medicines}")
 
             # (2) 미복용 알림 (스케줄 시간 지남 + 안 먹음)
-            if now > time_obj:
+            if now_dt > routine_date_time:
                 not_taken = [
                     r for r in schedule.get("routine_dtos", [])
                     if not r.get("is_taken", False)
@@ -131,7 +131,7 @@ async def get_medicine_routine_list_by_date(
             # (3) 곧 복용 예정 안내
             schedule_dt = datetime.combine(datetime.today(), time_obj)
             if now_dt < schedule_dt <= now_dt + soon_delta:
-                lines.append(f"잠시 후 {schedule.get('name', '')} 복용 시간이 다가옵니다. 준비해 주세요!")
+                lines.append(f"잠시 후 {schedule.get('name', '')} 복용 시간이 다가옵니다. 꼭 복용해 주세요!")
 
     return {"message": "\n".join(lines)}
 
