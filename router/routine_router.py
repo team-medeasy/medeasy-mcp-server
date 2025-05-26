@@ -72,8 +72,8 @@ kst = pytz.timezone('Asia/Seoul')
 @router.get("", operation_id="get_medicine_routine_list_by_date")
 async def get_medicine_routine_list_by_date(
         jwt_token: str = Query(description="Users JWT Token", required=True),
-        start_date: date = Query(default= datetime.now(kst).date(),description="Query start date (default: today)"),
-        end_date: date = Query(default=datetime.now(kst).date(),description="Query start date (default: today)")
+        start_date: date = Query(default=datetime.now(kst).date(), description="Query start date (default: today)"),
+        end_date: date = Query(default=datetime.now(kst).date(), description="Query start date (default: today)")
 ):
     url = f"{medeasy_api_url}/routine"
     logger.info(f"사용자 복약 일정 조회 {start_date}~{end_date}")
@@ -88,53 +88,109 @@ async def get_medicine_routine_list_by_date(
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=f"조회 실패: {resp.text}")
 
-
     now = datetime.now(kst).time()
-    lines = []
-    lines.append("오늘 복약 일정에 대해 알려드릴게요!")
-
     data = resp.json()["body"]
+
+    # 메시지 생성
+    messages = []
+    messages.append("오늘 복약 일정에 대해 알려드릴게요!")
+
+    # 데이터 가공
+    processed_data = []
     soon_delta = timedelta(minutes=30)
     now_dt = datetime.combine(datetime.today(), now)
 
-    for day in data:  # 날짜 단위 루틴 (보통 하루 단위로 1개만 들어있음)
+    for day in data:
         routine_date = datetime.strptime(day["take_date"], "%Y-%m-%d").date()
+
+        processed_schedules = []
 
         for schedule in day.get("user_schedule_dtos", []):
             take_time_str = schedule.get("take_time")
             if not take_time_str:
-                continue  # take_time 없으면 skip
+                continue
 
             try:
                 time_obj = datetime.strptime(take_time_str, "%H:%M:%S").time()
             except ValueError:
-                continue  # 포맷 이상할 경우 skip
+                continue
 
             routine_date_time = datetime.combine(routine_date, time_obj)
 
-            # (1) 전체 스케줄 요약
-            medicines = ", ".join( # ex) 오라록신정100mg(오플록사신) 1정, 씬지록신정100마이크로그램(레보티록신나트륨수화물) 1정
-                f"{routine.get('nickname', '')} {routine.get('dose', '')}정"
-                for routine in schedule.get("routine_dtos", [])
-            )
-            lines.append(f"- {schedule.get('name', '')} {time_obj.strftime('%H:%M')} : {medicines}")
+            # 스케줄 데이터 가공
+            processed_routines = []
+            not_taken_routines = []
 
-            # (2) 미복용 알림 (스케줄 시간 지남 + 안 먹음)
+            for routine in schedule.get("routine_dtos", []):
+                processed_routine = {
+                    "routine_id": routine.get("routine_id"),
+                    "nickname": routine.get("nickname", ""),
+                    "dose": routine.get("dose", 0),
+                    "is_taken": routine.get("is_taken", False),
+                    "medicine_id": routine.get("medicine_id", "")
+                }
+                processed_routines.append(processed_routine)
+
+                if not routine.get("is_taken", False):
+                    not_taken_routines.append(processed_routine)
+
+            # 스케줄별 상태 판단
+            schedule_status = "pending"  # 기본값
             if now_dt > routine_date_time:
-                not_taken = [
-                    r for r in schedule.get("routine_dtos", [])
-                    if not r.get("is_taken", False)
-                ]
-                if not_taken:
-                    meds = ", ".join(r.get("nickname", "") for r in not_taken)
-                    lines.append(f"아직 {schedule.get('name', '')}에 {meds}을(를) 복용하지 않으셨습니다.")
+                if not_taken_routines:
+                    schedule_status = "missed"
+                else:
+                    schedule_status = "completed"
+            elif now_dt < routine_date_time <= now_dt + soon_delta:
+                schedule_status = "upcoming"
 
-            # (3) 곧 복용 예정 안내
-            schedule_dt = datetime.combine(datetime.today(), time_obj)
-            if now_dt < schedule_dt <= now_dt + soon_delta:
-                lines.append(f"잠시 후 {schedule.get('name', '')} 복용 시간이 다가옵니다. 꼭 복용해 주세요!")
+            processed_schedule = {
+                "user_schedule_id": schedule.get("user_schedule_id"),
+                "name": schedule.get("name", ""),
+                "take_time": take_time_str,
+                "take_time_formatted": time_obj.strftime('%H:%M'),
+                "status": schedule_status,
+                "routines": processed_routines,
+                "not_taken_count": len(not_taken_routines),
+                "total_count": len(processed_routines)
+            }
+            processed_schedules.append(processed_schedule)
 
-    return {"message": "\n".join(lines)}
+            # 메시지 생성
+            medicines_summary = ", ".join(
+                f"{routine['nickname']} {routine['dose']}정"
+                for routine in processed_routines
+            )
+            messages.append(f"- {schedule.get('name', '')} {time_obj.strftime('%H:%M')} : {medicines_summary}")
+
+            # 미복용 알림
+            if schedule_status == "missed":
+                not_taken_names = ", ".join(r["nickname"] for r in not_taken_routines)
+                messages.append(f"아직 {schedule.get('name', '')}에 {not_taken_names}을(를) 복용하지 않으셨습니다.")
+
+            # 곧 복용 예정 안내
+            elif schedule_status == "upcoming":
+                messages.append(f"잠시 후 {schedule.get('name', '')} 복용 시간이 다가옵니다. 꼭 복용해 주세요!")
+
+        processed_day = {
+            "take_date": day["take_date"],
+            "schedules": processed_schedules,
+            "total_schedules": len(processed_schedules),
+            "missed_schedules": len([s for s in processed_schedules if s["status"] == "missed"]),
+            "upcoming_schedules": len([s for s in processed_schedules if s["status"] == "upcoming"])
+        }
+        processed_data.append(processed_day)
+
+    return {
+        "data": processed_data,
+        "messages": messages,
+        "summary": {
+            "total_days": len(processed_data),
+            "total_schedules": sum(day["total_schedules"] for day in processed_data),
+            "total_missed": sum(day["missed_schedules"] for day in processed_data),
+            "total_upcoming": sum(day["upcoming_schedules"] for day in processed_data)
+        }
+    }
 
 @router.patch(
     "/check",
