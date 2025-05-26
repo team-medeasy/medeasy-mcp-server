@@ -69,128 +69,159 @@ kst = pytz.timezone('Asia/Seoul')
 #             raise HTTPException(status_code=502, detail=f"루틴 생성 실패: {resp.text}")
 #         return resp.json()
 
-@router.get("", operation_id="get_medicine_routine_list_by_date")
+@router.get("", operation_id="get_medicine_routine_list_by_date_detailed")  # operation_id 변경 고려
 async def get_medicine_routine_list_by_date(
-        jwt_token: str = Query(description="Users JWT Token", required=True),
-        start_date: date = Query(default=datetime.now(kst).date(), description="Query start date (default: today)"),
-        end_date: date = Query(default=datetime.now(kst).date(), description="Query start date (default: today)")
+        jwt_token: str = Query(description="사용자 JWT 토큰", required=True),
+        start_date: date = Query(default=datetime.now(kst).date(), description="조회 시작 날짜 (기본값: 오늘)"),
+        end_date: date = Query(default=datetime.now(kst).date(), description="조회 종료 날짜 (기본값: 오늘)")
 ):
     url = f"{medeasy_api_url}/routine"
-    logger.info(f"사용자 복약 일정 조회 {start_date}~{end_date}")
+    logger.info(f"사용자 복약 일정 상세 조회 시작: {start_date} ~ {end_date}")
     params = {
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat()
     }
     headers = {"Authorization": f"Bearer {jwt_token}", "Content-Type": "application/json"}
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=headers, params=params)
-    if resp.status_code >= 400:
-        raise HTTPException(status_code=resp.status_code, detail=f"조회 실패: {resp.text}")
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, params=params)
 
-    now = datetime.now(kst).time()
-    data = resp.json()["body"]
+        if resp.status_code >= 400:
+            try:
+                error_detail = resp.json().get("detail", resp.text)
+            except Exception:
+                error_detail = resp.text if resp.text else f"오류 코드 {resp.status_code}"
+            logger.error(f"외부 API 오류 응답 (상태 코드: {resp.status_code}): {error_detail}")
+            raise HTTPException(status_code=resp.status_code, detail=f"복약 일정 조회 실패: {error_detail}")
 
-    # 메시지 생성
-    messages = []
-    messages.append("오늘 복약 일정에 대해 알려드릴게요!")
+        response_data = resp.json()
+        if "body" not in response_data:
+            logger.error(f"외부 API 응답에 'body' 필드가 없습니다: {response_data}")
+            raise HTTPException(status_code=500, detail="외부 API 응답 형식 오류: 'body' 필드 누락")
 
-    # 데이터 가공
-    processed_data = []
+        api_data_body = response_data["body"]  # 변수명 변경 data -> api_data_body
+        if not isinstance(api_data_body, list):
+            logger.error(f"외부 API 응답의 'body' 필드가 리스트가 아닙니다: {api_data_body}")
+            raise HTTPException(status_code=500, detail="외부 API 응답 형식 오류: 'body'가 리스트가 아님")
+
+    except httpx.RequestError as e:
+        logger.error(f"외부 API 호출 중 네트워크 오류 발생: {e}")
+        raise HTTPException(status_code=503, detail=f"외부 서비스 호출 중 오류가 발생했습니다: {e}")
+    except Exception as e:
+        logger.error(f"복약 일정 조회 중 예기치 않은 오류 발생: {e}")
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(status_code=500, detail=f"서버 내부 오류가 발생했습니다: {e}")
+
+    now_time = datetime.now(kst).time()
+    lines_for_message = []  # AI 메시지용 라인
+    schedule_details_list = []  # 구조화된 상세 정보 리스트
+
     soon_delta = timedelta(minutes=30)
-    now_dt = datetime.combine(datetime.today(), now)
+    today_for_comparison = datetime.now(kst).date()
+    now_dt = datetime.combine(today_for_comparison, now_time)
 
-    for day in data:
-        routine_date = datetime.strptime(day["take_date"], "%Y-%m-%d").date()
+    for day_data in api_data_body:
+        if not isinstance(day_data, dict) or "take_date" not in day_data:
+            logger.warning(f"처리할 수 없는 형식의 일일 데이터입니다: {day_data}, 해당 데이터를 건너뜁니다.")
+            continue
 
-        processed_schedules = []
+        try:
+            routine_date = datetime.strptime(day_data["take_date"], "%Y-%m-%d").date()
+        except ValueError:
+            logger.warning(f"날짜 형식이 잘못되었습니다: {day_data.get('take_date')}, 해당 날짜 데이터를 건너뜁니다.")
+            continue
 
-        for schedule in day.get("user_schedule_dtos", []):
+        for schedule in day_data.get("user_schedule_dtos", []):
+            if not isinstance(schedule, dict):
+                logger.warning(f"처리할 수 없는 형식의 스케줄 데이터입니다: {schedule}, 해당 스케줄을 건너뜁니다.")
+                continue
+
             take_time_str = schedule.get("take_time")
             if not take_time_str:
+                logger.debug(f"스케줄 ID {schedule.get('user_schedule_id')}에 복용 시간(take_time) 정보가 없어 건너뜁니다.")
                 continue
 
             try:
                 time_obj = datetime.strptime(take_time_str, "%H:%M:%S").time()
             except ValueError:
+                logger.warning(
+                    f"스케줄 ID {schedule.get('user_schedule_id')}의 복용 시간(take_time: {take_time_str}) 형식이 잘못되어 건너뜁니다.")
                 continue
 
             routine_date_time = datetime.combine(routine_date, time_obj)
 
-            # 스케줄 데이터 가공
-            processed_routines = []
-            not_taken_routines = []
+            # --- 구조화된 데이터(`schedule_details_list`) 생성 ---
+            current_schedule_medicines_details = []
+            routine_dtos_data = schedule.get("routine_dtos", [])
+            for routine in routine_dtos_data:
+                if isinstance(routine, dict):
+                    current_schedule_medicines_details.append({
+                        "routine_id": routine.get("routine_id"),
+                        "medicine_id": routine.get("medicine_id"),
+                        "medicine_name": routine.get("nickname", "알 수 없는 약"),
+                        "dose": routine.get("dose"),
+                        "is_taken": routine.get("is_taken", False)
+                    })
 
-            for routine in schedule.get("routine_dtos", []):
-                processed_routine = {
-                    "routine_id": routine.get("routine_id"),
-                    "nickname": routine.get("nickname", ""),
-                    "dose": routine.get("dose", 0),
-                    "is_taken": routine.get("is_taken", False),
-                    "medicine_id": routine.get("medicine_id", "")
-                }
-                processed_routines.append(processed_routine)
-
-                if not routine.get("is_taken", False):
-                    not_taken_routines.append(processed_routine)
-
-            # 스케줄별 상태 판단
-            schedule_status = "pending"  # 기본값
-            if now_dt > routine_date_time:
-                if not_taken_routines:
-                    schedule_status = "missed"
-                else:
-                    schedule_status = "completed"
-            elif now_dt < routine_date_time <= now_dt + soon_delta:
-                schedule_status = "upcoming"
-
-            processed_schedule = {
+            schedule_info_entry = {
+                "date": routine_date.isoformat(),
+                "time": take_time_str,
+                "schedule_name": schedule.get("name", "알 수 없는 시간대"),
                 "user_schedule_id": schedule.get("user_schedule_id"),
-                "name": schedule.get("name", ""),
-                "take_time": take_time_str,
-                "take_time_formatted": time_obj.strftime('%H:%M'),
-                "status": schedule_status,
-                "routines": processed_routines,
-                "not_taken_count": len(not_taken_routines),
-                "total_count": len(processed_routines)
+                "medicines": current_schedule_medicines_details
             }
-            processed_schedules.append(processed_schedule)
+            schedule_details_list.append(schedule_info_entry)
+            # --- 구조화된 데이터 생성 끝 ---
 
-            # 메시지 생성
-            medicines_summary = ", ".join(
-                f"{routine['nickname']} {routine['dose']}정"
-                for routine in processed_routines
-            )
-            messages.append(f"- {schedule.get('name', '')} {time_obj.strftime('%H:%M')} : {medicines_summary}")
+            # --- AI 메시지(`lines_for_message`) 생성 ---
+            # (1) 전체 스케줄 요약
+            if not routine_dtos_data:
+                medicines_summary_str = "등록된 약 정보 없음"
+            else:
+                medicines_summary_str = ", ".join(
+                    f"{routine.get('nickname', '알 수 없는 약')} {routine.get('dose', '') if routine.get('dose') is not None else ''}정"
+                    for routine in routine_dtos_data if isinstance(routine, dict)
+                )
+            lines_for_message.append(
+                f"- {schedule.get('name', '알 수 없는 시간대')} {time_obj.strftime('%H:%M')} : {medicines_summary_str}")
 
-            # 미복용 알림
-            if schedule_status == "missed":
-                not_taken_names = ", ".join(r["nickname"] for r in not_taken_routines)
-                messages.append(f"아직 {schedule.get('name', '')}에 {not_taken_names}을(를) 복용하지 않으셨습니다.")
+            # (2) 미복용 알림 (스케줄 시간 지남 + 안 먹음 + 오늘 또는 과거 스케줄)
+            if routine_date <= today_for_comparison and now_dt > routine_date_time:
+                not_taken_medicines = [
+                    r for r in routine_dtos_data
+                    if isinstance(r, dict) and not r.get("is_taken", False)
+                ]
+                if not_taken_medicines:
+                    meds_not_taken_str = ", ".join(r.get("nickname", "알 수 없는 약") for r in not_taken_medicines)
+                    lines_for_message.append(
+                        f"아직 {schedule.get('name', '')} ({time_obj.strftime('%H:%M')})에 {meds_not_taken_str}을(를) 복용하지 않으셨습니다.")
 
-            # 곧 복용 예정 안내
-            elif schedule_status == "upcoming":
-                messages.append(f"잠시 후 {schedule.get('name', '')} 복용 시간이 다가옵니다. 꼭 복용해 주세요!")
+            # (3) 곧 복용 예정 안내 (오늘 스케줄 + 현재 시간 이후 30분 이내)
+            if routine_date == today_for_comparison:
+                schedule_dt_for_soon_check = routine_date_time
+                if now_dt < schedule_dt_for_soon_check <= now_dt + soon_delta:
+                    lines_for_message.append(
+                        f"잠시 후 {time_obj.strftime('%H시 %M분')}에 {schedule.get('name', '')} 복용 시간이 다가옵니다. 꼭 복용해 주세요!")
+            # --- AI 메시지 생성 끝 ---
 
-        processed_day = {
-            "take_date": day["take_date"],
-            "schedules": processed_schedules,
-            "total_schedules": len(processed_schedules),
-            "missed_schedules": len([s for s in processed_schedules if s["status"] == "missed"]),
-            "upcoming_schedules": len([s for s in processed_schedules if s["status"] == "upcoming"])
-        }
-        processed_data.append(processed_day)
+    final_message_str = ""
+    if not lines_for_message:  # 생성된 AI 메시지 라인이 없을 경우 (즉, 처리할 스케줄이 없었음)
+        current_today_date = datetime.now(kst).date()
+        if start_date == end_date:
+            if start_date == current_today_date:
+                final_message_str = "오늘 등록된 복약 일정이 없습니다."
+            else:
+                final_message_str = f"{start_date.year}년 {start_date.month}월 {start_date.day}일에 등록된 복약 일정이 없습니다."
+        else:
+            final_message_str = f"{start_date.year}년 {start_date.month}월 {start_date.day}일부터 {end_date.year}년 {end_date.month}월 {end_date.day}일까지 등록된 복약 일정이 없습니다."
+        # schedule_details_list는 이 경우 이미 비어있을 것이므로 별도 처리 필요 없음
+    else:
+        final_message_str = "\n".join(lines_for_message)
 
-    return {
-        "data": processed_data,
-        "messages": messages,
-        "summary": {
-            "total_days": len(processed_data),
-            "total_schedules": sum(day["total_schedules"] for day in processed_data),
-            "total_missed": sum(day["missed_schedules"] for day in processed_data),
-            "total_upcoming": sum(day["upcoming_schedules"] for day in processed_data)
-        }
-    }
+    return {"message": final_message_str, "schedule_details": schedule_details_list}
+
 
 @router.patch(
     "/check",
