@@ -25,6 +25,9 @@ async def search_medicine(
     if not jwt_token:
         return {"error": "authorization token is required"}
 
+    if not medicine_name:
+        return {"error": "medicine name is required"}
+
     # JWT 토큰 설정 (실제 토큰으로 대체 필요)
     headers = {
         "Authorization": f"Bearer {jwt_token}"
