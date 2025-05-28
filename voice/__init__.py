@@ -16,7 +16,7 @@ voice_setting_repo = VoiceSettingRepository(
 
 # 사용 가능한 화자 목록
 AVAILABLE_SPEAKERS = {
-    "vnara": "여성 음성 (밝은 톤)",
+    "vara": "여성 음성 (밝은 톤)",
     "vdaeseong": "남성 음성"
 }
 
