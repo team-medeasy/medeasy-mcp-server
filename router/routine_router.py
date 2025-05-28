@@ -606,3 +606,11 @@ async def register_routine_by_pills_photo(
         jwt_token: str = Query(description="Users JWT Token", required=True),
 ):
     return "복용 일정을 등록하기 위해 복약 정보를 알려주세요."
+
+@router.delete(
+    path="/delete/routine",
+    operation_id="delete_medication_routine",
+    description="사용자가 복약 일정 삭제를 원할 때 사용하는 도구"
+)
+async def delete_routine():
+    return "삭제 하실 복약 일정을 말씀해주세요."
