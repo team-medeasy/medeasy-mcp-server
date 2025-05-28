@@ -1,7 +1,7 @@
 import httpx
 import os
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 from dotenv import load_dotenv
 import logging
